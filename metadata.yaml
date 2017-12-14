@@ -1,0 +1,20 @@
+name: telegraf
+summary: <Fill in summary here>
+maintainer: Michiel Ghyselinck <michiel.ghyselinck@tengu.io>
+description: |
+  <Multi-line description here>
+tags:
+  - monitoring
+subordinate: true
+requires:
+  influxdb-output:
+    interface: influxdb-api
+  mongodb-input:
+    interface: mongodb
+    scope: container
+  mysql-input:
+    interface: mysql
+    scope: container
+  juju-info:
+    interface: juju-info
+    scope: container
