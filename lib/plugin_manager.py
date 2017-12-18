@@ -29,11 +29,19 @@ class PluginManager(object):
         plugins = self.get_plugins()
         plugins['output'][app_name] = config
         with open(self.file_path, 'w') as plugins_file:
-            json.dump(plugins, plugins_file)
+            json.dump(plugins, plugins_file, indent=4)
 
     def add_input_plugin(self, app_name, config):
         """Adds an input plugin to plugins.json."""
         plugins = self.get_plugins()
         plugins['input'][app_name] = config
         with open(self.file_path, 'w') as plugins_file:
-            json.dump(plugins, plugins_file)
+            json.dump(plugins, plugins_file, indent=4)
+
+    def remove_input_plugin(self, app_name):
+        """Removes an input plugin from plugins.json."""
+        plugins = self.get_plugins()
+        if app_name in plugins['input']:
+            plugins['input'].pop(app_name)
+        with open(self.file_path, 'w') as plugins_file:
+            json.dump(plugins, plugins_file, indent=4)

@@ -5,20 +5,23 @@ import subprocess
 import json
 import os
 import shutil
+import socket
 
 from charmhelpers.core import unitdata
-from charms.reactive import when, when_not, set_state, remove_state
+from charms.reactive import hook, when, when_not, when_any, when_not_all, set_state, remove_state
 from charmhelpers.fetch.archiveurl import ArchiveUrlFetchHandler
-from charmhelpers.core.hookenv import open_port, close_port, status_set
+from charmhelpers.core.hookenv import open_port, close_port, status_set, unit_get
 from charmhelpers.core.host import service_stop, service_restart, service_running, service_available, mkdir
 from charmhelpers.core.templating import render
 
 from plugin_manager import PluginManager
+from count_manager import CountManager
 
 
 DB = unitdata.kv()
 CONFIG_FILE = "/etc/telegraf/telegraf.conf"
 PLUGINS_FILE = "/opt/telegraf/plugins.json"
+COUNT_FILE = "/opt/telegraf/telegraf.json"
 
 
 @when_not('layer-telegraf.installed')
@@ -27,7 +30,9 @@ def install_layer_telegraf():
     # Check if another Telegraf subordinate is already installed.
     if is_telegraf_installed():
         print("Telegraf already installed.")
+        increment_number_telegrafs()
         set_state('layer-telegraf.installed')
+        set_state('layer-telegraf.needs_restart')
     else:
         print("Telegraf is not installed. Will install it...")
         status_set('maintenance', 'Installing Telegraf...')
@@ -39,6 +44,8 @@ def install_layer_telegraf():
         subprocess.check_call(['dpkg', '--force-confdef', '-i',
                                '/opt/telegraf/telegraf_1.4.5-1_amd64.deb'])
         shutil.copyfile('files/plugins.json', '/opt/telegraf/plugins.json')
+        shutil.copyfile('files/telegraf.json', '/opt/telegraf/telegraf.json')
+        increment_number_telegrafs()
         set_state('layer-telegraf.installed')
         set_state('layer-telegraf.needs_restart')
 
@@ -53,14 +60,34 @@ def start_layer_telegraf():
     else:
         status_set('blocked', 'Telegraf failed.')
 
+@when('layer-telegraf.check_need_remove')
+def check_removal():
+    count_manager = CountManager(COUNT_FILE)
+    number_of_telegrafs = count_manager.get_count()
+    if number_of_telegrafs <= 0:
+        print("Was last telegraf...")
+        set_state('layer-telegraf.remove')
+    remove_state('layer-telegraf.check_need_remove')
 
-@when('stop')
-def stop_and_remove_telegraf():
+
+@when('layer-telegraf.remove')
+def remove_telegraf():
     """Removes the Telegraf service and all its files and directories."""
-    print("Removing Telegraf...")
-    subprocess.check_call(['rm', '/opt/telegraf_1.4.5-1_amd64.deb'])
-    subprocess.check_call(['dpkg', '-P', 'telegraf'])
+    if os.path.isdir('/opt/telegraf'):
+        print("Removing telegraf...")
+        subprocess.check_call(['rm', '-r', '/opt/telegraf'])
+        subprocess.check_call(['dpkg', '-P', 'telegraf'])
 
+
+# @hook('host-system-relation-joined')
+# def host_system_joined(host):
+#     # Configs met tags toevoegen aan config file (of config dir?)
+
+@hook('host-system-relation-departed')
+def host_system_departed(host):
+    print('Unconfiguring host-system...')
+    decrement_number_telegrafs()
+    set_state('layer-telegraf.check_need_remove')
 
 ###############################################################################
 #                            OUTPUT RELATIONS                                 #
@@ -74,13 +101,9 @@ def configure_influxdb_output(influxdb):
     context = {'urls': urls,
                'user': influxdb.user(),
                'password': influxdb.password()}
-    # Render influx config
-    influxdb_config = get_config(context, 'output-influxdb.conf')
-    # Add to key value store
+    influxdb_config = get_config(context, 'output/influxdb.conf')
     add_output_plugin('influxdb', influxdb_config)
-    # Render telegraf.conf
     render_config()
-    # Restart
     set_state('layer-telegraf.needs_restart')
     set_state('plugins.influxdb-output.configured')
 
@@ -93,33 +116,41 @@ def configure_influxdb_output(influxdb):
 @when('mongodb-input.available')
 @when_not('plugins.mongodb-input.configured')
 def configure_mongodb_input(mongodb):
-    servers = ['mongodb://' + mongodb.hostname() + ':' + mongodb.port()]
+    servers = ['mongodb://{}:{}'.format(mongodb.hostname(), mongodb.port())]
     context = {'servers': servers}
-    # Render mongodb config
-    mongodb_config = get_config(context, 'input-mongodb.conf')
-    # Add to key value store
+    mongodb_config = get_config(context, 'input/mongodb.conf')
     add_input_plugin('mongodb', mongodb_config)
-    # Render telegraf.conf
     render_config()
-    # Restart
     set_state('layer-telegraf.needs_restart')
     set_state('plugins.mongodb-input.configured')
+
+
+@when('plugins.mongodb-input.configured')
+@when_not('mongodb-input.connected')
+def unconfigure_mongodb_input():
+    remove_input_plugin('mongodb')
+    render_config()
+    decrement_number_telegrafs()
+    remove_state('plugins.mongodb-input.configured')
+    # TODO: Must be manually removed because mongodb interface doesn't do it.
+    remove_state('mongodb-input.available')
+    set_state('layer-telegraf.check_need_remove')
 
 
 @when('mysql-input.available')
 @when_not('plugins.mysql-input.configured')
 def configure_mysql_input(mysql):
-    servers = [mysql.user() + ':' + mysql.password() + "@tcp(" + mysql.host() + ':' + str(mysql.port()) + ')/?tls=false']
+    servers = [mysql.user() + ':' + mysql.password() + "@tcp(" + mysql.host()
+               + ':' + str(mysql.port()) + ')/?tls=false']
     context = {'servers': servers}
-    # Render mysql config
     mysql_config = get_config(context, 'input/mysql.conf')
-    # Add to key value store
     add_input_plugin('mysql', mysql_config)
-    # Render telegraf.conf
     render_config()
-    # Restart
     set_state('layer-telegraf.needs_restart')
     set_state('plugins.mysql-input.configured')
+
+
+# TODO: Unconfigure MySQL
 
 
 ###############################################################################
@@ -132,45 +163,20 @@ def get_config(context, filename):
     return content
 
 
-# def add_output_plugin(plugin_name, plugin_config):
-#     """Add output plugin config string to key-value store."""
-#     output_plugins = DB.get('output_plugins')
-#     if output_plugins is not None:
-#         output_plugins[plugin_name] = plugin_config
-#     else:
-#         output_plugins = {plugin_name: plugin_config}
-#     DB.set('output_plugins', output_plugins)
-
 def add_output_plugin(plugin_name, plugin_config):
-    """Adds an output plugin to plugins.json."""
     plugin_manager = PluginManager(PLUGINS_FILE)
     plugin_manager.add_output_plugin(plugin_name, plugin_config)
 
 
-# def add_input_plugin(plugin_name, plugin_config):
-#     """Add input plugin config string to key-value store."""
-#     input_plugins = DB.get('input_plugins')
-#     if input_plugins is not None:
-#         input_plugins[plugin_name] = plugin_config
-#     else:
-#         input_plugins = {plugin_name: plugin_config}
-#     DB.set('input_plugins', input_plugins)
-
-
 def add_input_plugin(plugin_name, plugin_config):
-    """Adds an input plugin to plugins.json."""
     plugin_manager = PluginManager(PLUGINS_FILE)
     plugin_manager.add_input_plugin(plugin_name, plugin_config)
 
 
-# def get_output_plugins_config():
-#     """Append all configs of the output plugins."""
-#     config = ""
-#     output_plugins = DB.get('output_plugins')
-#     if output_plugins is not None:
-#         for app, conf in output_plugins.items():
-#             config += conf
-#     return config
+def remove_input_plugin(plugin_name):
+    plugin_manager = PluginManager(PLUGINS_FILE)
+    plugin_manager.remove_input_plugin(plugin_name)
+
 
 def get_output_plugins_config():
     """Append all configs of the output plugins."""
@@ -178,18 +184,9 @@ def get_output_plugins_config():
     plugin_manager = PluginManager(PLUGINS_FILE)
     output_plugins = plugin_manager.get_output_plugins()
     for app, conf in output_plugins.items():
-        config += conf
+        config += conf + "\n\n\n"
     return config
 
-
-# def get_input_plugins_config():
-#     """Append all configs of the input plugins."""
-#     config = ""
-#     input_plugins = DB.get('input_plugins')
-#     if input_plugins is not None:
-#         for app, conf in input_plugins.items():
-#             config += conf
-#     return config
 
 def get_input_plugins_config():
     """Append all configs of the input plugins."""
@@ -197,21 +194,31 @@ def get_input_plugins_config():
     plugin_manager = PluginManager(PLUGINS_FILE)
     input_plugins = plugin_manager.get_input_plugins()
     for app, conf in input_plugins.items():
-        config += conf
+        config += conf + "\n\n\n"
     return config
 
 
 def render_config():
-    context = {'output_plugins': get_output_plugins_config(),
+    context = {'hostname': socket.gethostname(),
+               'output_plugins': get_output_plugins_config(),
                'input_plugins': get_input_plugins_config()}
-    render(source='telegraf.conf', target='/etc/telegraf/telegraf.conf', context=context)
+    render(source='telegraf.conf',
+           target='/etc/telegraf/telegraf.conf',
+           context=context)
 
 
 def is_telegraf_installed():
     """Checks if Telegraf is already installed on machine."""
-    try:
-        subprocess.check_output(['dpkg', '-l', 'telegraf'])
-    except subprocess.CalledProcessError as e:
-        return False
-    else:
-        return True
+    return os.path.isdir('/opt/telegraf')
+
+
+def increment_number_telegrafs():
+    print("Incrementing number of telegrafs...")
+    count_manager = CountManager(COUNT_FILE)
+    count_manager.increment()
+
+
+def decrement_number_telegrafs():
+    print("Decrementing number of telegrafs...")
+    count_manager = CountManager(COUNT_FILE)
+    count_manager.decrement()

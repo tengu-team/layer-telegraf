@@ -15,6 +15,6 @@ requires:
   mysql-input:
     interface: mysql
     scope: container
-  juju-info:
+  host-system:
     interface: juju-info
     scope: container
