@@ -6,9 +6,10 @@ import json
 import os
 import shutil
 import socket
+import random
 
-from charmhelpers.core import unitdata
-from charms.reactive import hook, when, when_not, when_any, when_not_all, set_state, remove_state
+from charmhelpers.core import unitdata, hookenv
+from charms.reactive import hook, when, when_not, when_any, when_not_all, set_flag, clear_flag
 from charmhelpers.fetch.archiveurl import ArchiveUrlFetchHandler
 from charmhelpers.core.hookenv import open_port, close_port, status_set, unit_get
 from charmhelpers.core.host import service_stop, service_restart, service_running, service_available, mkdir
@@ -26,13 +27,10 @@ COUNT_FILE = "/opt/telegraf/telegraf.json"
 
 @when_not('layer-telegraf.installed')
 def install_layer_telegraf():
-    """Installs the Telegraf software."""
-    # Check if another Telegraf subordinate is already installed.
+    """Installs the Telegraf software if it is not already installed."""
     if is_telegraf_installed():
         print("Telegraf already installed.")
         increment_number_telegrafs()
-        set_state('layer-telegraf.installed')
-        set_state('layer-telegraf.needs_restart')
     else:
         print("Telegraf is not installed. Will install it...")
         status_set('maintenance', 'Installing Telegraf...')
@@ -46,8 +44,9 @@ def install_layer_telegraf():
         shutil.copyfile('files/plugins.json', '/opt/telegraf/plugins.json')
         shutil.copyfile('files/telegraf.json', '/opt/telegraf/telegraf.json')
         increment_number_telegrafs()
-        set_state('layer-telegraf.installed')
-        set_state('layer-telegraf.needs_restart')
+
+    set_flag('layer-telegraf.installed')
+    set_flag('layer-telegraf.needs_restart')
 
 
 @when('layer-telegraf.installed')
@@ -56,18 +55,19 @@ def start_layer_telegraf():
     service_restart('telegraf')
     if service_running('telegraf'):
         status_set('active', 'Telegraf is running.')
-        remove_state('layer-telegraf.needs_restart')
+        clear_flag('layer-telegraf.needs_restart')
     else:
         status_set('blocked', 'Telegraf failed.')
+
 
 @when('layer-telegraf.check_need_remove')
 def check_removal():
     count_manager = CountManager(COUNT_FILE)
     number_of_telegrafs = count_manager.get_count()
-    if number_of_telegrafs <= 0:
-        print("Was last telegraf...")
-        set_state('layer-telegraf.remove')
-    remove_state('layer-telegraf.check_need_remove')
+    if number_of_telegrafs == 0:
+        print("Was last telegraf, service must be removed...")
+        set_flag('layer-telegraf.remove')
+    clear_flag('layer-telegraf.check_need_remove')
 
 
 @when('layer-telegraf.remove')
@@ -79,15 +79,25 @@ def remove_telegraf():
         subprocess.check_call(['dpkg', '-P', 'telegraf'])
 
 
-# @hook('host-system-relation-joined')
-# def host_system_joined(host):
-#     # Configs met tags toevoegen aan config file (of config dir?)
+@hook('host-system-relation-joined')
+def host_system_joined(host):
+    """Executes when a juju-info relation is made with a service."""
+    name_service = get_remote_unit_name().replace('/', '-')
+    add_tag(name_service)
+    render_config()
+    set_flag('layer-telegraf.needs_restart')
+
 
 @hook('host-system-relation-departed')
 def host_system_departed(host):
     print('Unconfiguring host-system...')
+    # TODO: When relation is gone the remote unit name is None. How to fix?
+    name_service = get_remote_unit_name()
+    remove_tag(name_service)
+    render_config()
     decrement_number_telegrafs()
-    set_state('layer-telegraf.check_need_remove')
+    set_flag('layer-telegraf.check_need_remove')
+
 
 ###############################################################################
 #                            OUTPUT RELATIONS                                 #
@@ -104,8 +114,8 @@ def configure_influxdb_output(influxdb):
     influxdb_config = get_config(context, 'output/influxdb.conf')
     add_output_plugin('influxdb', influxdb_config)
     render_config()
-    set_state('layer-telegraf.needs_restart')
-    set_state('plugins.influxdb-output.configured')
+    set_flag('layer-telegraf.needs_restart')
+    set_flag('plugins.influxdb-output.configured')
 
 
 ###############################################################################
@@ -121,8 +131,8 @@ def configure_mongodb_input(mongodb):
     mongodb_config = get_config(context, 'input/mongodb.conf')
     add_input_plugin('mongodb', mongodb_config)
     render_config()
-    set_state('layer-telegraf.needs_restart')
-    set_state('plugins.mongodb-input.configured')
+    set_flag('layer-telegraf.needs_restart')
+    set_flag('plugins.mongodb-input.configured')
 
 
 @when('plugins.mongodb-input.configured')
@@ -131,10 +141,10 @@ def unconfigure_mongodb_input():
     remove_input_plugin('mongodb')
     render_config()
     decrement_number_telegrafs()
-    remove_state('plugins.mongodb-input.configured')
-    # TODO: Must be manually removed because mongodb interface doesn't do it.
-    remove_state('mongodb-input.available')
-    set_state('layer-telegraf.check_need_remove')
+    clear_flag('plugins.mongodb-input.configured')
+    # Must be manually removed because mongodb interface doesn't do it.
+    clear_flag('mongodb-input.available')
+    set_flag('layer-telegraf.check_need_remove')
 
 
 @when('mysql-input.available')
@@ -146,8 +156,8 @@ def configure_mysql_input(mysql):
     mysql_config = get_config(context, 'input/mysql.conf')
     add_input_plugin('mysql', mysql_config)
     render_config()
-    set_state('layer-telegraf.needs_restart')
-    set_state('plugins.mysql-input.configured')
+    set_flag('layer-telegraf.needs_restart')
+    set_flag('plugins.mysql-input.configured')
 
 
 # TODO: Unconfigure MySQL
@@ -163,6 +173,11 @@ def get_config(context, filename):
     return content
 
 
+def add_tag(app_name):
+    plugin_manager = PluginManager(PLUGINS_FILE)
+    plugin_manager.add_tag(app_name)
+
+
 def add_output_plugin(plugin_name, plugin_config):
     plugin_manager = PluginManager(PLUGINS_FILE)
     plugin_manager.add_output_plugin(plugin_name, plugin_config)
@@ -173,9 +188,25 @@ def add_input_plugin(plugin_name, plugin_config):
     plugin_manager.add_input_plugin(plugin_name, plugin_config)
 
 
+def remove_tag(app_name):
+    plugin_manager = PluginManager(PLUGINS_FILE)
+    plugin_manager.remove_tag(app_name)
+
+
 def remove_input_plugin(plugin_name):
     plugin_manager = PluginManager(PLUGINS_FILE)
     plugin_manager.remove_input_plugin(plugin_name)
+
+
+def get_tags_config():
+    """Returns a list of all the tags (applications)."""
+    plugin_manager = PluginManager(PLUGINS_FILE)
+    tags = plugin_manager.get_tags()
+    tags_config = ""
+    for tag in tags:
+        line = "    {} = '{}_cpu'\n".format(tag, tag)
+        tags_config += line
+    return tags_config
 
 
 def get_output_plugins_config():
@@ -201,7 +232,8 @@ def get_input_plugins_config():
 def render_config():
     context = {'hostname': socket.gethostname(),
                'output_plugins': get_output_plugins_config(),
-               'input_plugins': get_input_plugins_config()}
+               'input_plugins': get_input_plugins_config(),
+               'tags': get_tags_config()}
     render(source='telegraf.conf',
            target='/etc/telegraf/telegraf.conf',
            context=context)
@@ -222,3 +254,12 @@ def decrement_number_telegrafs():
     print("Decrementing number of telegrafs...")
     count_manager = CountManager(COUNT_FILE)
     count_manager.decrement()
+
+
+def get_remote_unit_name():
+    for rel_type in hookenv.metadata()['requires'].keys():
+        rels = hookenv.relations_of_type(rel_type)
+        if rels and len(rels) >= 1:
+            rel = rels[0]
+            if rel['private-address'] == hookenv.unit_private_ip():
+                return rel['__unit__']

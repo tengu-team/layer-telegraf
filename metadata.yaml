@@ -5,6 +5,7 @@ description: |
   <Multi-line description here>
 tags:
   - monitoring
+series: ['xenial']
 subordinate: true
 requires:
   influxdb-output:

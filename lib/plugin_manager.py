@@ -12,6 +12,11 @@ class PluginManager(object):
             data = json.load(plugins_file)
         return data
 
+    def get_tags(self):
+        with open(self.file_path) as plugins_file:
+            data = json.load(plugins_file)
+        return data['tags']
+
     def get_output_plugins(self):
         """Reads plugins.json and returns a dict containing the output plugins."""
         with open(self.file_path) as plugins_file:
@@ -23,6 +28,13 @@ class PluginManager(object):
         with open(self.file_path) as plugins_file:
             data = json.load(plugins_file)
         return data['input']
+
+    def add_tag(self, app_name):
+        """Adds a tag to plugins.json."""
+        data = self.get_plugins()
+        data['tags'].append(app_name)
+        with open(self.file_path, 'w') as plugins_file:
+            json.dump(data, plugins_file, indent=4)
 
     def add_output_plugin(self, app_name, config):
         """Adds an output plugin to plugins.json."""
@@ -37,6 +49,12 @@ class PluginManager(object):
         plugins['input'][app_name] = config
         with open(self.file_path, 'w') as plugins_file:
             json.dump(plugins, plugins_file, indent=4)
+
+    def remove_tag(self, app_name):
+        data = self.get_plugins()
+        data['tags'].remove(app_name)
+        with open(self.file_path, 'w') as plugins_file:
+            json.dump(data, plugins_file, indent=4)
 
     def remove_input_plugin(self, app_name):
         """Removes an input plugin from plugins.json."""
