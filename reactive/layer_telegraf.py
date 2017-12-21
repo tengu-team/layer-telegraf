@@ -2,17 +2,16 @@
 # pylint: disable=c0111,c0325,e0401
 
 import subprocess
-import json
 import os
 import shutil
 import socket
-import random
+import time
 
-from charmhelpers.core import unitdata, hookenv
-from charms.reactive import hook, when, when_not, when_any, when_not_all, set_flag, clear_flag
+from charms.reactive import hook, when, when_not, set_flag, clear_flag
 from charmhelpers.fetch.archiveurl import ArchiveUrlFetchHandler
-from charmhelpers.core.hookenv import open_port, close_port, status_set, unit_get
-from charmhelpers.core.host import service_stop, service_restart, service_running, service_available, mkdir
+from charmhelpers.core import unitdata
+from charmhelpers.core.hookenv import status_set, remote_unit
+from charmhelpers.core.host import service_restart, service_running, mkdir
 from charmhelpers.core.templating import render
 
 from plugin_manager import PluginManager
@@ -29,10 +28,8 @@ COUNT_FILE = "/opt/telegraf/telegraf.json"
 def install_layer_telegraf():
     """Installs the Telegraf software if it is not already installed."""
     if is_telegraf_installed():
-        print("Telegraf already installed.")
         increment_number_telegrafs()
     else:
-        print("Telegraf is not installed. Will install it...")
         status_set('maintenance', 'Installing Telegraf...')
         fetcher = ArchiveUrlFetchHandler()
         if not os.path.isdir('/opt/telegraf'):
@@ -46,12 +43,12 @@ def install_layer_telegraf():
         increment_number_telegrafs()
 
     set_flag('layer-telegraf.installed')
-    set_flag('layer-telegraf.needs_restart')
 
 
 @when('layer-telegraf.installed')
 @when('layer-telegraf.needs_restart')
 def start_layer_telegraf():
+    time.sleep(5)
     service_restart('telegraf')
     if service_running('telegraf'):
         status_set('active', 'Telegraf is running.')
@@ -65,7 +62,6 @@ def check_removal():
     count_manager = CountManager(COUNT_FILE)
     number_of_telegrafs = count_manager.get_count()
     if number_of_telegrafs == 0:
-        print("Was last telegraf, service must be removed...")
         set_flag('layer-telegraf.remove')
     clear_flag('layer-telegraf.check_need_remove')
 
@@ -74,7 +70,6 @@ def check_removal():
 def remove_telegraf():
     """Removes the Telegraf service and all its files and directories."""
     if os.path.isdir('/opt/telegraf'):
-        print("Removing telegraf...")
         subprocess.check_call(['rm', '-r', '/opt/telegraf'])
         subprocess.check_call(['dpkg', '-P', 'telegraf'])
 
@@ -82,7 +77,7 @@ def remove_telegraf():
 @hook('host-system-relation-joined')
 def host_system_joined(host):
     """Executes when a juju-info relation is made with a service."""
-    name_service = get_remote_unit_name().replace('/', '-')
+    name_service = remote_unit().replace('/', '-')
     add_tag(name_service)
     render_config()
     set_flag('layer-telegraf.needs_restart')
@@ -90,9 +85,7 @@ def host_system_joined(host):
 
 @hook('host-system-relation-departed')
 def host_system_departed(host):
-    print('Unconfiguring host-system...')
-    # TODO: When relation is gone the remote unit name is None. How to fix?
-    name_service = get_remote_unit_name()
+    name_service = remote_unit().replace('/', '-')
     remove_tag(name_service)
     render_config()
     decrement_number_telegrafs()
@@ -102,6 +95,13 @@ def host_system_departed(host):
 ###############################################################################
 #                            OUTPUT RELATIONS                                 #
 ###############################################################################
+
+
+@when('layer-telegraf.installed')
+@when_not('plugins.influxdb-output.configured')
+def no_influx_blocked():
+    """A relation with InfluxDB is required."""
+    status_set('blocked', 'Please create a relation with InfluxDB.')
 
 
 @when('influxdb-output.available')
@@ -147,17 +147,18 @@ def unconfigure_mongodb_input():
     set_flag('layer-telegraf.check_need_remove')
 
 
-@when('mysql-input.available')
-@when_not('plugins.mysql-input.configured')
-def configure_mysql_input(mysql):
-    servers = [mysql.user() + ':' + mysql.password() + "@tcp(" + mysql.host()
-               + ':' + str(mysql.port()) + ')/?tls=false']
-    context = {'servers': servers}
-    mysql_config = get_config(context, 'input/mysql.conf')
-    add_input_plugin('mysql', mysql_config)
-    render_config()
-    set_flag('layer-telegraf.needs_restart')
-    set_flag('plugins.mysql-input.configured')
+# TODO:Configure MySQL
+# @when('mysql-input.available')
+# @when_not('plugins.mysql-input.configured')
+# def configure_mysql_input(mysql):
+#     servers = [mysql.user() + ':' + mysql.password() + "@tcp(" + mysql.host()
+#                + ':' + str(mysql.port()) + ')/?tls=false']
+#     context = {'servers': servers}
+#     mysql_config = get_config(context, 'input/mysql.conf')
+#     add_input_plugin('mysql', mysql_config)
+#     render_config()
+#     set_flag('layer-telegraf.needs_restart')
+#     set_flag('plugins.mysql-input.configured')
 
 
 # TODO: Unconfigure MySQL
@@ -245,21 +246,10 @@ def is_telegraf_installed():
 
 
 def increment_number_telegrafs():
-    print("Incrementing number of telegrafs...")
     count_manager = CountManager(COUNT_FILE)
     count_manager.increment()
 
 
 def decrement_number_telegrafs():
-    print("Decrementing number of telegrafs...")
     count_manager = CountManager(COUNT_FILE)
     count_manager.decrement()
-
-
-def get_remote_unit_name():
-    for rel_type in hookenv.metadata()['requires'].keys():
-        rels = hookenv.relations_of_type(rel_type)
-        if rels and len(rels) >= 1:
-            rel = rels[0]
-            if rel['private-address'] == hookenv.unit_private_ip():
-                return rel['__unit__']
