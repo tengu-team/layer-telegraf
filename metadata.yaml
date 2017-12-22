@@ -12,6 +12,8 @@ subordinate: true
 requires:
   influxdb-output:
     interface: influxdb-api
+  opentsdb-output:
+    interface: opentsdb
   mongodb-input:
     interface: mongodb
     scope: container

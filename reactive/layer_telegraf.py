@@ -118,6 +118,18 @@ def configure_influxdb_output(influxdb):
     set_flag('plugins.influxdb-output.configured')
 
 
+@when('opentsdb-output.available')
+@when_not('plugins.opentsdb-output.configured')
+def configure_opentsdb_output(opentsdb):
+    context = {'host': opentsdb.host(),
+               'port': opentsdb.port()}
+    opentsdb_config = get_config(context, 'output/opentsdb.conf')
+    add_output_plugin('opentsdb', opentsdb_config)
+    render_config()
+    set_flag('layer-telegraf.needs_restart')
+    set_flag('plugins.opentsdb-output.configured')
+
+
 ###############################################################################
 #                             INPUT RELATIONS                                 #
 ###############################################################################
