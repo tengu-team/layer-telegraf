@@ -4,11 +4,20 @@ Telegraf is the Agent for Collecting & Reporting Metrics & Data.
 
 It is part of the TICK stack and is a plugin-driven server agent for collecting and reporting metrics. Telegraf has plugins or integrations to source a variety of metrics directly from the system it’s running on, pull metrics from third-party APIs, or even listen for metrics via a StatsD and Kafka consumer services. It also has output plugins to send metrics to a variety of other datastores, services, and message queues, including InfluxDB, Graphite, OpenTSDB, Datadog, Librato, Kafka, MQTT, NSQ, and many others.
 
+# Requirements
+
+The interface has not been added to the layer-index yet.
+Clone the opentsdb interface in your local interfaces directory.
+
+```sh
+git clone https://github.com/tengu-team/interface-opentsdb
+```
+
 # Usage
 
 Telegraf collects metrics from one or more applications and stores them in a database of choice.
 ```sh
-juju deploy telegraf
+juju deploy cs:telegraf-10
 ```
 ## Supported output plugins
 Output plugins are destinations were Telegraf writes metrics to:
