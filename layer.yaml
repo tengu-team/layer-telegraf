@@ -1,2 +1,3 @@
-includes: ['layer:basic', 'interface:opentsdb', 'interface:influxdb-api', 'interface:mongodb', 'interface:mysql', 'interface:juju-info']
+includes: ['layer:basic', 'interface:opentsdb', 'interface:influxdb-api',
+'interface:mongodb', 'interface:mysql', 'interface:juju-info', 'interface:nginx-stats']
 repo: https://github.com/tengu-team/layer-telegraf.git

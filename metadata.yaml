@@ -20,6 +20,9 @@ requires:
   mysql-input:
     interface: mysql
     scope: container
+  nginx-input:
+    interface: nginx-stats
+    scope: container
   host-system:
     interface: juju-info
     scope: container

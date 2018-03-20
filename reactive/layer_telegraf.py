@@ -159,6 +159,33 @@ def unconfigure_mongodb_input():
     set_flag('layer-telegraf.check_need_remove')
 
 
+@when('nginx-input.available')
+@when_not('plugins.nginx-input.configured')
+def configure_nginx_input(nginx):
+    nginx_status_url = nginx.configuration()["status_url"]
+    status_path = nginx_status_url.split("/")[3]
+    local_status_url = "http://localhost/{}".format(status_path)
+    urls = [local_status_url]
+    context = {'urls': urls}
+    nginx_config = get_config(context, 'input/nginx.conf')
+    add_input_plugin('nginx', nginx_config)
+    render_config()
+    set_flag('layer-telegraf.needs_restart')
+    set_flag('plugins.nginx-input.configured')
+
+
+@when('plugins.nginx-input.configured')
+@when_not('nginx-input.available')
+def unconfigure_nginx_input():
+    remove_input_plugin('nginx')
+    render_config()
+    decrement_number_telegrafs()
+    clear_flag('plugins.nginx-input.configured')
+    # Must be manually removed because mongodb interface doesn't do it.
+    clear_flag('nginx-input.available')
+    set_flag('layer-telegraf.check_need_remove')
+
+
 # TODO:Configure MySQL
 # @when('mysql-input.available')
 # @when_not('plugins.mysql-input.configured')
