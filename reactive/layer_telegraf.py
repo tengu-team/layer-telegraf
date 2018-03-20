@@ -185,6 +185,32 @@ def unconfigure_nginx_input():
     set_flag('layer-telegraf.check_need_remove')
 
 
+@when('arangodb-input.available')
+@when_not('arangodb-input-plugin.configured')
+def configure_arangodb_input(arangodb):
+    print('configure arangodb input')
+    print(arangodb.host())
+    servers = ["http://{}:{}/_admin/statistics".format(arangodb.host(), arangodb.port())]
+    print(servers)
+    context = {'servers': servers}
+    arangodb_config = get_config(context, 'input/http.conf')
+    add_input_plugin('arangodb', arangodb_config)
+    render_config()
+    set_flag('layer-telegraf.needs_restart')
+    set_flag('arangodb-input-plugin.configured')
+
+
+@when('arangodb-input-plugin.configured')
+@when_not('arangodb-input.available')
+def unconfigure_arangodb_input():
+    remove_input_plugin('arangodb')
+    render_config()
+    decrement_number_telegrafs()
+    clear_flag('arangodb-input-plugin.configured')
+    clear_flag('arangodb-input.available')
+    set_flag('layer-telegraf.check_need_remove')
+
+
 # TODO:Configure MySQL
 # @when('mysql-input.available')
 # @when_not('plugins.mysql-input.configured')
