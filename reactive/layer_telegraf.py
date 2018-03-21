@@ -181,33 +181,34 @@ def unconfigure_nginx_input():
     render_config()
     decrement_number_telegrafs()
     clear_flag('plugins.nginx-input.configured')
-    # Must be manually removed because mongodb interface doesn't do it.
     clear_flag('nginx-input.available')
     set_flag('layer-telegraf.check_need_remove')
 
 
 @when('arangodb-input.available')
-@when_not('arangodb-input-plugin.configured')
+@when_not('plugins.arangodb-input.configured')
 def configure_arangodb_input(arangodb):
     print('configure arangodb input')
     print(arangodb.host())
     servers = ["http://{}:{}/_admin/statistics".format(arangodb.host(), arangodb.port())]
     print(servers)
-    context = {'servers': servers}
+    context = {'servers': servers,
+               'username': arangodb.username(),
+               'password': arangodb.password()}
     arangodb_config = get_config(context, 'input/http.conf')
     add_input_plugin('arangodb', arangodb_config)
     render_config()
     set_flag('layer-telegraf.needs_restart')
-    set_flag('arangodb-input-plugin.configured')
+    set_flag('plugins.arangodb-input.configured')
 
 
-@when('arangodb-input-plugin.configured')
+@when('plugins.arangodb-input.configured')
 @when_not('arangodb-input.available')
 def unconfigure_arangodb_input():
     remove_input_plugin('arangodb')
     render_config()
     decrement_number_telegrafs()
-    clear_flag('arangodb-input-plugin.configured')
+    clear_flag('plugins.arangodb-input.configured')
     clear_flag('arangodb-input.available')
     set_flag('layer-telegraf.check_need_remove')
 
