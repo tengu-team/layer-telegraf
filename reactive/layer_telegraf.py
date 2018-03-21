@@ -162,9 +162,10 @@ def unconfigure_mongodb_input():
 @when('nginx-input.available')
 @when_not('plugins.nginx-input.configured')
 def configure_nginx_input(nginx):
-    # TODO: Make dynamic! Maybe create own interface?
-    # urls = [nginx.status_url]
-    urls = ["http://localhost/nginx_status"]
+    nginx_status_url = nginx.configuration()["status_url"]
+    status_path = nginx_status_url.split("/")[3]
+    local_status_url = "http://localhost/{}".format(status_path)
+    urls = [local_status_url]
     context = {'urls': urls}
     nginx_config = get_config(context, 'input/nginx.conf')
     add_input_plugin('nginx', nginx_config)
@@ -180,7 +181,6 @@ def unconfigure_nginx_input():
     render_config()
     decrement_number_telegrafs()
     clear_flag('plugins.nginx-input.configured')
-    # Must be manually removed because mongodb interface doesn't do it.
     clear_flag('nginx-input.available')
     set_flag('layer-telegraf.check_need_remove')
 
@@ -192,7 +192,9 @@ def configure_arangodb_input(arangodb):
     print(arangodb.host())
     servers = ["http://{}:{}/_admin/statistics".format(arangodb.host(), arangodb.port())]
     print(servers)
-    context = {'servers': servers, 'username': arangodb.username(), 'password': arangodb.password()}
+    context = {'servers': servers,
+               'username': arangodb.username(),
+               'password': arangodb.password()}
     arangodb_config = get_config(context, 'input/http.conf')
     add_input_plugin('arangodb', arangodb_config)
     render_config()
