@@ -34,10 +34,10 @@ def install_layer_telegraf():
         fetcher = ArchiveUrlFetchHandler()
         if not os.path.isdir('/opt/telegraf'):
             mkdir('/opt/telegraf')
-        fetcher.download('https://dl.influxdata.com/telegraf/releases/telegraf_1.4.5-1_amd64.deb',
-                         '/opt/telegraf/telegraf_1.4.5-1_amd64.deb')
+        fetcher.download('https://dl.influxdata.com/telegraf/releases/telegraf_1.6.0-1_amd64.deb',
+                         '/opt/telegraf/telegraf_1.6.0-1_amd64.deb')
         subprocess.check_call(['dpkg', '--force-confdef', '-i',
-                               '/opt/telegraf/telegraf_1.4.5-1_amd64.deb'])
+                               '/opt/telegraf/telegraf_1.6.0-1_amd64.deb'])
         shutil.copyfile('files/plugins.json', '/opt/telegraf/plugins.json')
         shutil.copyfile('files/telegraf.json', '/opt/telegraf/telegraf.json')
         increment_number_telegrafs()
@@ -217,10 +217,7 @@ def unconfigure_nginx_input():
 @when('arangodb-input.available')
 @when_not('plugins.arangodb-input.configured')
 def configure_arangodb_input(arangodb):
-    print('configure arangodb input')
-    print(arangodb.host())
     servers = ["http://{}:{}/_admin/statistics".format(arangodb.host(), arangodb.port())]
-    print(servers)
     context = {'servers': servers,
                'username': arangodb.username(),
                'password': arangodb.password()}
