@@ -32,9 +32,9 @@ juju add-relation telegraf:influxdb-output influxdb:query
 
 ## Supported input applications
 When a relation is made with one of the applications listed below then Telegraf will collect specific metrics from this application:
-- MongoDB (mongodb plugin)
-- NGINX (nginx plugin)
-- ArangoDB (http plugin)
+- MongoDB ([mongodb plugin])
+- NGINX ([nginx plugin])
+- ArangoDB ([http plugin])
 
 How to add the relation:
 ```sh
