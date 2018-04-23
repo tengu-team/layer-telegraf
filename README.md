@@ -17,10 +17,10 @@ git clone https://github.com/tengu-team/interface-opentsdb
 
 Telegraf collects metrics from one or more applications and stores them in a database of choice.
 ```sh
-juju deploy cs:telegraf-10
+juju deploy cs:~tengu-team/telegraf-1
 ```
 ## Supported output plugins
-Output plugins are destinations were Telegraf writes metrics to:
+Output plugins are destinations where Telegraf writes metrics to:
 - InfluxDB
 
 How to add the relation:
@@ -32,7 +32,6 @@ juju add-relation telegraf:influxdb-output influxdb:query
 
 ## Supported input plugins
 When a relation is made with one of the services listed below then Telegraf will collect specific metrics from this application:
-
 - MongoDB
 
 How to add the relation:
@@ -47,11 +46,11 @@ If your application is not listed in the input or output plugin section then you
 juju add-relation telegraf:host-system application:juju-info
 ```
 
-
 # Contact Information
 - [Telegraf]
 - [Telegraf Documentation]
 - [Telegraf Charm Github]
+
 ## Authors
 - Michiel Ghyselinck <michiel.ghyselinck@tengu.io>
 

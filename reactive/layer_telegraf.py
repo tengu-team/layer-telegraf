@@ -118,6 +118,15 @@ def configure_influxdb_output(influxdb):
     set_flag('plugins.influxdb-output.configured')
 
 
+@when('plugins.influxdb-output.configured')
+@when_not('influxdb-output.available')
+def unconfigure_influxdb_output():
+    remove_output_plugin('influxdb')
+    render_config()
+    set_flag('layer-telegraf.needs_restart')
+    clear_flag('plugins.influxdb-output.configured')
+
+
 @when('opentsdb-output.available')
 @when_not('plugins.opentsdb-output.configured')
 def configure_opentsdb_output(opentsdb):
@@ -128,6 +137,15 @@ def configure_opentsdb_output(opentsdb):
     render_config()
     set_flag('layer-telegraf.needs_restart')
     set_flag('plugins.opentsdb-output.configured')
+
+
+@when('plugins.opentsdb-output.configured')
+@when_not('opentsdb-output.available')
+def unconfigure_opentsdb_output():
+    remove_output_plugin('opentsdb')
+    render_config()
+    set_flag('layer-telegraf.needs_restart')
+    clear_flag('plugins.opentsdb-output.configured')
 
 
 ###############################################################################
@@ -263,6 +281,11 @@ def remove_tag(app_name):
 def remove_input_plugin(plugin_name):
     plugin_manager = PluginManager(PLUGINS_FILE)
     plugin_manager.remove_input_plugin(plugin_name)
+
+
+def remove_output_plugin(plugin_name):
+    plugin_manager = PluginManager(PLUGINS_FILE)
+    plugin_manager.remove_output_plugin(plugin_name)
 
 
 def get_tags_config():
