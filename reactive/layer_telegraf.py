@@ -34,10 +34,10 @@ def install_layer_telegraf():
         fetcher = ArchiveUrlFetchHandler()
         if not os.path.isdir('/opt/telegraf'):
             mkdir('/opt/telegraf')
-        fetcher.download('https://dl.influxdata.com/telegraf/releases/telegraf_1.4.5-1_amd64.deb',
-                         '/opt/telegraf/telegraf_1.4.5-1_amd64.deb')
+        fetcher.download('https://dl.influxdata.com/telegraf/releases/telegraf_1.6.0-1_amd64.deb',
+                         '/opt/telegraf/telegraf_1.6.0-1_amd64.deb')
         subprocess.check_call(['dpkg', '--force-confdef', '-i',
-                               '/opt/telegraf/telegraf_1.4.5-1_amd64.deb'])
+                               '/opt/telegraf/telegraf_1.6.0-1_amd64.deb'])
         shutil.copyfile('files/plugins.json', '/opt/telegraf/plugins.json')
         shutil.copyfile('files/telegraf.json', '/opt/telegraf/telegraf.json')
         increment_number_telegrafs()
@@ -118,6 +118,23 @@ def configure_influxdb_output(influxdb):
     set_flag('plugins.influxdb-output.configured')
 
 
+@when('plugins.influxdb-output.configured')
+@when_not('influxdb-output.available')
+def unconfigure_influxdb_output():
+    # Temporary solution for removal problem. If you have 1 input and 1 output
+    # relation and remove the Telegraf application then first the input relation
+    # will be removed followed by output relation. But because there are no
+    # more input relations Telegraf will be removed from the machine. Therefore
+    # it is possible that files aren't on machine anymore.
+    try:
+        remove_output_plugin('influxdb')
+        render_config()
+    except FileNotFoundError:
+        pass
+    set_flag('layer-telegraf.needs_restart')
+    clear_flag('plugins.influxdb-output.configured')
+
+
 @when('opentsdb-output.available')
 @when_not('plugins.opentsdb-output.configured')
 def configure_opentsdb_output(opentsdb):
@@ -128,6 +145,18 @@ def configure_opentsdb_output(opentsdb):
     render_config()
     set_flag('layer-telegraf.needs_restart')
     set_flag('plugins.opentsdb-output.configured')
+
+
+@when('plugins.opentsdb-output.configured')
+@when_not('opentsdb-output.available')
+def unconfigure_opentsdb_output():
+    try:
+        remove_output_plugin('opentsdb')
+        render_config()
+    except FileNotFoundError:
+        pass
+    set_flag('layer-telegraf.needs_restart')
+    clear_flag('plugins.opentsdb-output.configured')
 
 
 ###############################################################################
@@ -181,8 +210,32 @@ def unconfigure_nginx_input():
     render_config()
     decrement_number_telegrafs()
     clear_flag('plugins.nginx-input.configured')
-    # Must be manually removed because mongodb interface doesn't do it.
     clear_flag('nginx-input.available')
+    set_flag('layer-telegraf.check_need_remove')
+
+
+@when('arangodb-input.available')
+@when_not('plugins.arangodb-input.configured')
+def configure_arangodb_input(arangodb):
+    servers = ["http://{}:{}/_admin/statistics".format(arangodb.host(), arangodb.port())]
+    context = {'servers': servers,
+               'username': arangodb.username(),
+               'password': arangodb.password()}
+    arangodb_config = get_config(context, 'input/http.conf')
+    add_input_plugin('arangodb', arangodb_config)
+    render_config()
+    set_flag('layer-telegraf.needs_restart')
+    set_flag('plugins.arangodb-input.configured')
+
+
+@when('plugins.arangodb-input.configured')
+@when_not('arangodb-input.available')
+def unconfigure_arangodb_input():
+    remove_input_plugin('arangodb')
+    render_config()
+    decrement_number_telegrafs()
+    clear_flag('plugins.arangodb-input.configured')
+    clear_flag('arangodb-input.available')
     set_flag('layer-telegraf.check_need_remove')
 
 
@@ -236,6 +289,11 @@ def remove_tag(app_name):
 def remove_input_plugin(plugin_name):
     plugin_manager = PluginManager(PLUGINS_FILE)
     plugin_manager.remove_input_plugin(plugin_name)
+
+
+def remove_output_plugin(plugin_name):
+    plugin_manager = PluginManager(PLUGINS_FILE)
+    plugin_manager.remove_output_plugin(plugin_name)
 
 
 def get_tags_config():

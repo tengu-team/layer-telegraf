@@ -26,3 +26,6 @@ requires:
   host-system:
     interface: juju-info
     scope: container
+  arangodb-input:
+    interface: arangodb
+    scope: container

@@ -17,10 +17,10 @@ git clone https://github.com/tengu-team/interface-opentsdb
 
 Telegraf collects metrics from one or more applications and stores them in a database of choice.
 ```sh
-juju deploy cs:telegraf-10
+juju deploy cs:~tengu-team/telegraf-1
 ```
-## Supported output plugins
-Output plugins are destinations were Telegraf writes metrics to:
+## Supported output applications
+Output applications are destinations where Telegraf writes metrics to:
 - InfluxDB
 
 How to add the relation:
@@ -30,10 +30,11 @@ juju add-relation telegraf:influxdb-output influxdb:query
 ```
  For the moment only InfluxDB is supported but in the future other databases (f.e. OpenTSDB) will be added to the charm.
 
-## Supported input plugins
-When a relation is made with one of the services listed below then Telegraf will collect specific metrics from this application:
-
-- MongoDB
+## Supported input applications
+When a relation is made with one of the applications listed below then Telegraf will collect specific metrics from this application:
+- MongoDB (mongodb plugin)
+- NGINX (nginx plugin)
+- ArangoDB (http plugin)
 
 How to add the relation:
 ```sh
@@ -47,14 +48,17 @@ If your application is not listed in the input or output plugin section then you
 juju add-relation telegraf:host-system application:juju-info
 ```
 
-
 # Contact Information
 - [Telegraf]
 - [Telegraf Documentation]
 - [Telegraf Charm Github]
+
 ## Authors
 - Michiel Ghyselinck <michiel.ghyselinck@tengu.io>
 
 [telegraf documentation]: https://docs.influxdata.com/telegraf/v1.5/
 [telegraf charm github]: https://github.com/tengu-team/layer-telegraf
 [telegraf]: https://www.influxdata.com/time-series-platform/telegraf/
+[mongodb plugin]: https://github.com/influxdata/telegraf/tree/master/plugins/inputs/mongodb
+[nginx plugin]: https://github.com/influxdata/telegraf/tree/master/plugins/inputs/nginx
+[http plugin]: https://github.com/influxdata/telegraf/tree/master/plugins/inputs/http

@@ -63,3 +63,11 @@ class PluginManager(object):
             plugins['input'].pop(app_name)
         with open(self.file_path, 'w') as plugins_file:
             json.dump(plugins, plugins_file, indent=4)
+
+    def remove_output_plugin(self, app_name):
+        """Removes an output plugin from plugins.json."""
+        plugins = self.get_plugins()
+        if app_name in plugins['output']:
+            plugins['output'].pop(app_name)
+        with open(self.file_path, 'w') as plugins_file:
+            json.dump(plugins, plugins_file, indent=4)
