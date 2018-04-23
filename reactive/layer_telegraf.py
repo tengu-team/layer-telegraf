@@ -121,8 +121,16 @@ def configure_influxdb_output(influxdb):
 @when('plugins.influxdb-output.configured')
 @when_not('influxdb-output.available')
 def unconfigure_influxdb_output():
-    remove_output_plugin('influxdb')
-    render_config()
+    # Temporary solution for removal problem. If you have 1 input and 1 output
+    # relation and remove the Telegraf application then first the input relation
+    # will be removed followed by output relation. But because there are no
+    # more input relations Telegraf will be removed from the machine. Therefore
+    # it is possible that files aren't on machine anymore.
+    try:
+        remove_output_plugin('influxdb')
+        render_config()
+    except FileNotFoundError:
+        pass
     set_flag('layer-telegraf.needs_restart')
     clear_flag('plugins.influxdb-output.configured')
 
@@ -142,8 +150,11 @@ def configure_opentsdb_output(opentsdb):
 @when('plugins.opentsdb-output.configured')
 @when_not('opentsdb-output.available')
 def unconfigure_opentsdb_output():
-    remove_output_plugin('opentsdb')
-    render_config()
+    try:
+        remove_output_plugin('opentsdb')
+        render_config()
+    except FileNotFoundError:
+        pass
     set_flag('layer-telegraf.needs_restart')
     clear_flag('plugins.opentsdb-output.configured')
 
