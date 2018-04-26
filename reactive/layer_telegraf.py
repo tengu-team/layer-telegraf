@@ -59,8 +59,11 @@ def start_layer_telegraf():
 
 @when('layer-telegraf.check_need_remove')
 def check_removal():
-    count_manager = CountManager(COUNT_FILE)
-    number_of_telegrafs = count_manager.get_count()
+    try:
+        count_manager = CountManager(COUNT_FILE)
+        number_of_telegrafs = count_manager.get_count()
+    except FileNotFoundError:
+        number_of_telegrafs = 0
     if number_of_telegrafs == 0:
         set_flag('layer-telegraf.remove')
     clear_flag('layer-telegraf.check_need_remove')
@@ -86,9 +89,12 @@ def host_system_joined(host):
 @hook('host-system-relation-departed')
 def host_system_departed(host):
     name_service = remote_unit().replace('/', '-')
-    remove_tag(name_service)
-    render_config()
-    decrement_number_telegrafs()
+    try:
+        remove_tag(name_service)
+        render_config()
+        decrement_number_telegrafs()
+    except FileNotFoundError:
+        pass
     set_flag('layer-telegraf.check_need_remove')
 
 
